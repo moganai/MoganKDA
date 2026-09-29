@@ -38,8 +38,8 @@ from gdr_common import (
     chunk_gated_delta_rule_fwd_ref,
     chunk_gated_delta_rule_bwd_ref,
 )
-from flash_qla.ops.gated_delta_rule.chunk import chunk_gated_delta_rule
-from flash_qla.ops.gated_delta_rule.chunk.cp import build_cp_context
+from mogan_kda.ops.gated_delta_rule.chunk import chunk_gated_delta_rule
+from mogan_kda.ops.gated_delta_rule.chunk.cp import build_cp_context
 
 # (cu_seqlens, world_size, num_k_heads, num_v_heads, g_scale, use_h0, use_dht)
 # Interior boundaries are placed relative to the card edge at total/world_size.

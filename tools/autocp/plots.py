@@ -36,7 +36,7 @@ def ensure_matplotlib():
         import matplotlib
     except ImportError as e:
         raise SystemExit(
-            "--plot needs matplotlib, which is not a dependency of flash_qla "
+            "--plot needs matplotlib, which is not a dependency of mogan_kda "
             "(nothing on the launch path plots). Install it for calibration "
             "only:\n    pip install matplotlib") from e
     matplotlib.use("Agg")  # calibration runs on headless GPU boxes

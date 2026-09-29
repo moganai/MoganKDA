@@ -21,10 +21,10 @@ import torch.nn.functional as F
 
 import tilelang
 
-from flash_qla import chunk_gated_delta_rule as qla
-from flash_qla.ops.gated_delta_rule.chunk import CHUNK_SIZE, build_cp_context
-from flash_qla.ops.utils import chunk_local_cumsum, group_reduce_vector
-from flash_qla.ops.gated_delta_rule.chunk import (
+from mogan_kda import chunk_gated_delta_rule as qla
+from mogan_kda.ops.gated_delta_rule.chunk import CHUNK_SIZE, build_cp_context
+from mogan_kda.ops.utils import chunk_local_cumsum, group_reduce_vector
+from mogan_kda.ops.gated_delta_rule.chunk import (
     kkt_solve,
     fused_gdr_fwd,
     fused_gdr_bwd,
@@ -34,12 +34,12 @@ from flash_qla.ops.gated_delta_rule.chunk import (
     correct_terminal_states,
     get_warmup_chunks_bidi,
 )
-from flash_qla.ops.gated_delta_rule.chunk.cp.comm import (
+from mogan_kda.ops.gated_delta_rule.chunk.cp.comm import (
     all_gather_into_tensor,
     pack_hm,
     unpack_hm,
 )
-from flash_qla.utils import l2norm
+from mogan_kda.utils import l2norm
 
 try:
     import fla as _fla

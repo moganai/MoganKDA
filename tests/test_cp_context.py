@@ -9,13 +9,13 @@ import torch.distributed as dist
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from flash_qla.ops.gated_delta_rule.chunk import CHUNK_SIZE
-from flash_qla.ops.gated_delta_rule.chunk.cp import build_cp_context
-from flash_qla.ops.gated_delta_rule.chunk.cp.context import (
+from mogan_kda.ops.gated_delta_rule.chunk import CHUNK_SIZE
+from mogan_kda.ops.gated_delta_rule.chunk.cp import build_cp_context
+from mogan_kda.ops.gated_delta_rule.chunk.cp.context import (
     _build_intra_cp_context,
     _calc_inter_cp_seqs,
 )
-from flash_qla.ops.gated_delta_rule.chunk.cp.comm import pack_hm, unpack_hm
+from mogan_kda.ops.gated_delta_rule.chunk.cp.comm import pack_hm, unpack_hm
 
 from ref_context import ref_intra_context, ref_inter_context
 

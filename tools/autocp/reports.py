@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from flash_qla.ops.gated_delta_rule.chunk.cp.autocp.decision import decide
-from flash_qla.ops.gated_delta_rule.chunk.cp.autocp.utils import (
+from mogan_kda.ops.gated_delta_rule.chunk.cp.autocp.decision import decide
+from mogan_kda.ops.gated_delta_rule.chunk.cp.autocp.utils import (
     warmup_from_gate_avg,
 )
 

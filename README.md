@@ -1,139 +1,148 @@
-<p align="center">
-    <img src="https://qianwen-res.oss-cn-beijing.aliyuncs.com/flashqla/flashqla.png" width="1000"/>
-</p>
+# MoganKDA
 
-<p align="center">|&nbsp&nbsp 📜 <a href="https://qwen.ai/blog?id=flashqla">Blog</a>&nbsp&nbsp |</p>
+MoganKDA provides fused [TileLang](https://github.com/tile-ai/tilelang) kernels for **Kimi Delta Attention (KDA)**, the
+delta rule with a per-channel decay gate, for NVIDIA Hopper (sm90). It covers the forward and backward pass for training
+and inference, and moves the gate, beta, L2 normalisation and the output norm into the kernels. It is built on
+[FlashQLA](https://github.com/QwenLM/FlashQLA), whose gated delta rule (GDN, scalar gate) kernels are included and
+exposed through the same package.
 
-## News
+## Features
 
-- [2026-07] 🚀 Release FlashQLA v0.1.2 — adds forward pass for SM120 (Blackwell, thanks @minatoyukinaa) and now serves as a backend for [flash-linear-attention](https://github.com/fla-org/flash-linear-attention)'s GDN, providing plug-and-play acceleration through the standard FLA API.
-- [2026-06] ⚡ Release FlashQLA v0.1.1 — adds intra-card sequence parallelism for the backward pass and SM100 support. Also upgrades tilelang to v0.1.9 and aligned entry function signatures to the latest `flash-linear-attention` interface.
-
-## Introduction
-
-FlashQLA is a high-performance linear attention kernel library built on [TileLang](https://github.com/tile-ai/tilelang). FlashQLA applies **reasonable operator fusion and performance optimization** to the forward and backward passes of GDN Chunked Prefill, achieving **2-3× forward speedup** and **2× backward speedup** over the FLA Triton kernel across multiple scenarios on NVIDIA Hopper and Blackwell. The efficiency gains are particularly pronounced in pretraining scenarios and edge-side agentic inference.
-
-Key features:
-
-1.**Gate-driven automatic intra-card context parallelism**. By exploiting the exponential decay property of the GDN gate, FlashQLA automatically enables intra-card CP under TP, long-sequence, and small-head-count settings, improving GPU SM utilization.
-
-2.**Hardware-friendly algebraic reformulation**. We reformulate the forward and backward flows of GDN Chunked Prefill to a certain extent, effectively reducing Tensor Core, CUDA Core, and SFU overhead without sacrificing numerical precision.
-
-3.**TileLang fused warp-specialized kernels**. Rather than following the step-by-step decomposition into independent kernels, nor fusing the entire computation flow into a single kernel, we take CP and backward requirements into account, use TileLang to build several key fused kernels, and manually implement warpgroup specialization to overlap data movement, Tensor Core computation, and CUDA Core computation.
+- Per-channel gated delta rule (KDA), forward and backward, head dim 128.
+- In-kernel options:
+  - gate forms `eda`, `kimi`, `gdn` and `precomputed`, fused with the chunk-local cumsum, including their gradients
+    (`A_log`, `dt_bias`);
+  - sigmoid beta with a scale (`beta_scale * sigmoid(b)`);
+  - q/k L2 normalisation;
+  - a fused per-head gated RMSNorm output epilogue (`silu` or `sigmoid` gate).
+- Grouped value heads (`HV` a multiple of `HK`), packed/varlen sequences through `cu_seqlens` (state reset per document),
+  initial and final state, optional `[V, K]` state layout.
+- Deterministic (no atomics) and **bitwise prefix-invariant**: outputs and gradients of the first P tokens do not change
+  when later tokens change. The sub-block anchors used to keep `exp` in range are never later than the rows they serve,
+  so no information leaks from the future; this makes packed training and cached prefixes reproducible.
+- The backward keeps fp32-level accuracy for gradients that are sums with heavy cancellation (`A_log`, `dt_bias`) by
+  splitting the fp32 operands of the relevant GEMMs into a high and a low bf16 part (hi/lo split).
+- The gated delta rule (GDN) with its intra-card context parallelism is inherited from FlashQLA (`chunk_gated_delta_rule`).
 
 ## Installation
 
-Requirements:
-
-- SM90, SM100, SM103, SM120 or SM121
-- CUDA 12.8 or above
-- PyTorch 2.8 or above
-
-To install:
+Requirements: an sm90 GPU (H100 / H200 / GH200) for the KDA kernels, CUDA 12.8 or newer, Python 3.10 or newer,
+PyTorch 2.8 or newer and `tilelang==0.1.12`.
 
 ```bash
-pip install flash-qla
+git clone https://github.com/moganai/MoganKDA.git
+cd MoganKDA
+pip install -e .
 ```
 
-Alternatively you can build from source:
-
-```bash
-git clone https://github.com/QwenLM/FlashQLA.git
-cd FlashQLA
-pip install -v .
-```
+Kernels are JIT-compiled on first use (one compile per shape and option set, cached in `TILELANG_CACHE_DIR`).
 
 ## Usage
 
-### High-level API
-
 ```python
 import torch
-from flash_qla import chunk_gated_delta_rule
+from mogan_kda import chunk_kda
 
-o, final_state = chunk_gated_delta_rule(
-    q=q,          # [B, T, H_q, K]
-    k=k,          # [B, T, H_q, K]
-    v=v,          # [B, T, H_v, V]
-    g=g,          # [B, T, H_v]
-    beta=beta,    # [B, T, H_v]
-    scale=scale,
-    initial_state=initial_state,   # optional, [B, H_v, K, V]
-    output_final_state=True,
-    cu_seqlens=cu_seqlens,         # optional, for variable-length sequences
+B, T, HK, HV, D = 1, 8192, 8, 16, 128
+q = torch.randn(B, T, HK, D, device="cuda", dtype=torch.bfloat16, requires_grad=True)
+k = torch.randn(B, T, HK, D, device="cuda", dtype=torch.bfloat16, requires_grad=True)
+v = torch.randn(B, T, HV, D, device="cuda", dtype=torch.bfloat16, requires_grad=True)
+x = torch.randn(B, T, HV, D, device="cuda", requires_grad=True)          # raw gate pre-activation
+b = torch.randn(B, T, HV, device="cuda", requires_grad=True)             # raw beta
+A_log = torch.zeros(HV, device="cuda", requires_grad=True)
+dt_bias = torch.zeros(HV, D, device="cuda", requires_grad=True)
+cu_seqlens = torch.tensor([0, 3000, 5000, 8192], device="cuda", dtype=torch.int32)   # packed documents (B == 1)
+
+o, final_state = chunk_kda(
+    q, k, v, x, b,
+    cu_seqlens=cu_seqlens,
+    gate_mode="eda", A_log=A_log, dt_bias=dt_bias, lower_bound=-5.0,     # gate computed in the kernel
+    beta_mode="sigmoid", beta_scale=2.0,
+    use_qk_l2norm_in_kernel=True,
+    output_norm=dict(weight=torch.ones(D, device="cuda"), gate=torch.randn(B, T, HV, D, device="cuda"), act="silu"),
 )
+o.sum().backward()
 ```
 
-### Low-level API
+`chunk_kda(q, k, v, g, beta, *, scale=None, initial_state=None, output_final_state=False, cu_seqlens=None,
+state_v_first=False, gate_mode="precomputed", A_log=None, dt_bias=None, lower_bound=-5.0, beta_mode="precomputed",
+beta_scale=1.0, use_qk_l2norm_in_kernel=False, output_norm=None)` returns `(o, final_state)`.
 
-For separate forward and backward calls:
+- `q`, `k`: `[B, T, HK, 128]` bf16; `v`: `[B, T, HV, 128]` bf16; `g`: `[B, T, HV, 128]` (fp32 or bf16); `beta`: `[B, T, HV]`.
+- `cu_seqlens` (int32) requires `B == 1`. `initial_state`: fp32 `[N, HV, 128, 128]`.
+- `gate_mode`: `"eda"` `g = l + (-l) exp(-(exp(A_log)/|l|) softplus(x + dt_bias))`; `"kimi"` `g = l sigmoid(exp(A_log)(x + dt_bias))`;
+  `"gdn"` `g = max(-exp(A_log) softplus(x + dt_bias), l)` (the lower bound is enforced); `"precomputed"` `g = x`,
+  the natural-log decay. `l = lower_bound`. `A_log`: `[HV]`, `dt_bias`: `[HV, 128]` or flat.
+- `output_norm`: `dict(weight, gate, act, eps)`, `RMSNorm(o) * weight * act(gate)` per head; the output is then fp32.
+- `chunk_delta_rule` is the same function and also accepts a scalar gate (`g` of shape `[B, T, HV]`, GDN kernels).
+  `chunk_gated_delta_rule` is the GDN entry point inherited from FlashQLA.
 
-```python
-from flash_qla import chunk_gated_delta_rule_fwd, chunk_gated_delta_rule_bwd
+## Benchmarks
 
-# Forward
-g, A, o, h, final_state, cp_cache = chunk_gated_delta_rule_fwd(
-    q, k, v, g, beta, scale=scale, initial_state=h0, cu_seqlens=cu_seqlens
-)
+Single H-class Hopper GPU (GH200), one KDA layer, forward + backward, HK = 16, HV = 32, D = 128, 64k tokens per GPU,
+packed documents (lognormal lengths, median 500), bf16. `benchmark/bench_kda.py`.
 
-# Backward
-dq, dk, dv, db, dg, dh0 = chunk_gated_delta_rule_bwd(
-    q, k, v, g, beta, A, do, dht=dht, scale=scale, initial_state=h0,
-    cu_seqlens=cu_seqlens, cp_cache=cp_cache,
-)
-```
+| scenario | MoganKDA (ms) | FLA `chunk_kda` (ms) |
+|---|---|---|
+| S1: 8 rows x 8k, short documents | 31.2 | 37.9 |
+| S2: 2 rows x 32k, short documents + 20% long documents (4k-24k) | 30.7 | 38.6 |
+| S3: 1 row x 64k, short documents + one 40k document | 30.7 | 39.5 |
+| S4: one 64k document | 30.4 | 40.9 |
+| S5: 1 row x 8k | 4.6 | 5.4 |
 
-## Tests
+MoganKDA runs the full option path (eda gate, sigmoid beta, L2, fused epilogue). FLA has no eda gate or output epilogue,
+so its timing covers `chunk_kda` only, without the epilogue; the comparison favours FLA. At the 1B shape (HK = 8, HV = 16,
+`--small`) the MoganKDA / FLA time ratio is 0.66-0.79.
+
+Training throughput, 1B hybrid model (18 KDA layers, HK = 8, HV = 16), same data and seed. Baseline: FLA `chunk_kda` with the
+gate, L2 normalisation and output norm computed in torch. MoganKDA: gate, beta, L2 and epilogue in the kernels.
+
+| setup | FLA | MoganKDA |
+|---|---|---|
+| 1 node x 4 GH200 | 29.2k tok/s/GPU | 34.1k tok/s/GPU (+17%) |
+| 8 nodes | 26.4k tok/s/GPU | 31.2k tok/s/GPU (+18%) |
+| peak memory (1 node) | 80.9 GB | 74.2 GB |
+
+The loss curves of the two backends agree to four decimals.
+
+## Numerical notes
+
+- **Gate contract.** The per-token natural-log decay must satisfy `g >= -5`. The kernels evaluate `exp2` of differences
+  of chunk-local cumulative gates inside 16-row sub-blocks, and this bound keeps every exponent inside the fp32 range
+  (`15 * 5 / ln 2 < 127`). `eda`, `kimi` and `gdn` (with the enforced lower bound) satisfy it by construction;
+  with `precomputed` gates it is the caller's responsibility.
+- **Prefix invariance.** Anchoring a sub-block at its middle row (as `flash-linear-attention` did before
+  [fla#1240](https://github.com/fla-org/flash-linear-attention/issues/1240)) lets outputs of early tokens depend on later
+  gates. MoganKDA anchors every sub-block at its first row, so tokens depend only on earlier tokens, and results are
+  bitwise identical when the future changes.
+- **Accuracy.** Against an fp64 reference, forward outputs agree to a max relative error below 2e-2 and every gradient
+  below 5e-2 (typically 1e-2 or better). In the hardest measured case (gdn gate, gradient of `A_log`, a sum over all tokens
+  and channels) the error is 2.2e-2, compared with 2.4e-2 for FLA. `dq` and `dk` leave the backward as bf16.
+
+## Testing
+
+A GPU is required for most tests (the CPU-only reference tests run anywhere).
 
 ```bash
-python -m pytest tests/test_gdr_unit.py -v
+pip install -e ".[test]"
+pytest tests -m "not gpu"                          # fp64 reference / oracle tests, no GPU
+KDA_IMPL=qla,fla pytest tests/test_kda_unit.py     # option matrix vs fp64 reference and FLA (sm90)
+pytest tests/test_kda_options.py tests/test_kda_gate.py
+pytest tests/test_kkt_solve_kda.py tests/test_fused_fwd_kda.py tests/test_bwd_*_kda.py tests/test_kda_bwd_kernels.py
+python benchmark/bench_kda.py --scen S1,S4        # layer benchmark (add --small for HK 8 / HV 16)
 ```
 
-## Profiling
+`KDA_FULL=1` runs the full option matrix in `test_kda_unit.py`. The GDN tests inherited from FlashQLA are
+`tests/test_gdr_unit.py` and `tests/test_cp_*.py`.
 
-```bash
-# require flash linear attention for comparison
-pip install flash_linear_attention==0.5.0
+## Scope
 
-python profile/profile_gdr.py --set develop
-python profile/profile_gdr.py --set develop --skip-bwd
-```
+MoganKDA targets Hopper (sm90) for KDA. The inherited FlashQLA context parallelism (CP) applies to GDN; KDA context
+parallelism is not included.
 
-## Benchmark
+## Acknowledgements and license
 
-We benchmarked FlashQLA against the FLA Triton and FlashInfer baseline (FLA 0.5.0, Triton 3.5.1, FlashInfer 0.6.9, TileLang 0.1.8) on the head configurations used by the Qwen3.5 / Qwen3.6 family h_k,v \in {64, 48, 32, 24, 16, 8}, corresponding to TP1 through TP8.
-
-<p align="center">
-    <img src="https://qianwen-res.oss-cn-beijing.aliyuncs.com/flashqla/fwd_bwd_latency_comparison.png" width="1000"/>
-<p>
-
-Specifically, the forward (FWD) benchmarks measure single-kernel latency for different models and TP settings under varying batch lengths, while the backward (BWD) benchmarks examine the relationship between total token count within a batch and latency during a single update step.
-
-More detail in [benchmark_results_H200.txt](./benchmark/benchmark_results_H200.txt) and [benchmark_results_GB200.txt](./benchmark/benchmark_results_GB200.txt).
-
-```bash
-# require flash linear attention and flashinfer for comparison
-pip install flash_linear_attention==0.5.0 flashinfer-python==0.6.13
-
-python benchmark/bench_gated_delta_rule.py
-```
-
-## Acknowledge
-
-FlashQLA is inspired by [Flash Linear Attention](https://github.com/fla-org/flash-linear-attention), [TileLang](https://github.com/tile-ai/tilelang) and [FlashInfer](https://github.com/flashinfer-ai/flashinfer/) projects.
-
-## License
-
-FlashQLA is released under the MIT License.
-
-## Citation
-
-```bibtex
-@misc{flashqla2025,
-    title={FlashQLA: Flash Qwen Linear Attention},
-    author={Zhang, Chengruidong and Lin, Xi and Jiang, Huiqiang and Wang, Zekun and Li, Xiao and Cao, Yizhong and Zhuang, Bohan and Men, Rui and Zhang, Jianwei and Zheng, Bo and Lin, Junyang and Liu, Dayiheng and Zhou, Jingren},
-    year={2026},
-    publisher={GitHub},
-    howpublished={\url{https://github.com/QwenLM/FlashQLA}},
-}
-```
+MoganKDA is derived from [FlashQLA](https://github.com/QwenLM/FlashQLA) (Qwen team, Alibaba, MIT), and its algorithms and
+test methodology follow [flash-linear-attention](https://github.com/fla-org/flash-linear-attention) (MIT); FLA is also the
+reference implementation used in the benchmarks. Released under the MIT License (see `LICENSE`): Copyright (c) 2026 Qwen,
+Alibaba; Copyright (c) 2026 MoganAI.

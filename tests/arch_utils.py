@@ -3,13 +3,13 @@
 """Architecture detection and the per-arch capability table.
 
 Deliberately dependency-light: it imports ``tilelang.contrib.nvcc`` (guarded) and
-nothing from ``flash_qla``, so ``conftest.py`` can use it during collection even on
-a machine where ``import flash_qla`` would fail.
+nothing from ``mogan_kda``, so ``conftest.py`` can use it during collection even on
+a machine where ``import mogan_kda`` would fail.
 
 The capability table is the single place that records what each arch can actually
 run, so tests and profiling stop hard-coding arch names:
 
-* ``chunk_size``   -- must match ``flash_qla...chunk.CHUNK_SIZE``
+* ``chunk_size``   -- must match ``mogan_kda...chunk.CHUNK_SIZE``
 * ``intra``        -- intra-card CP
 * ``inter``        -- inter-card CP
 * ``inter_intra``  -- combined inter+intra CP, which needs ``aggregate_card_state``;

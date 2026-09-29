@@ -15,12 +15,12 @@ import torch.nn.functional as F
 import tilelang
 
 # Kernel Imports
-from flash_qla import (
+from mogan_kda import (
     chunk_gated_delta_rule_fwd as qla_fwd,
     chunk_gated_delta_rule_bwd as qla_bwd,
 )
-from flash_qla.ops.gated_delta_rule.chunk import CHUNK_SIZE, build_cp_context
-from flash_qla.utils import l2norm
+from mogan_kda.ops.gated_delta_rule.chunk import CHUNK_SIZE, build_cp_context
+from mogan_kda.utils import l2norm
 
 try:
     from fla.ops.gated_delta_rule.chunk import (
@@ -302,11 +302,11 @@ def bench_fwd(
 
     try:
         mean = tilelang.profiler.do_bench(call_qla_fwd, warmup=warmup, rep=repeats, backend=backend)
-        results["flash_qla"] = mean
+        results["mogan_kda"] = mean
     except RuntimeError as e:
         print(f"\n[WARN] FlashQLA Fwd failed: {e}")
         cleanup_cuda()
-        results["flash_qla"] = float("nan")
+        results["mogan_kda"] = float("nan")
 
     if HAS_FI:
 
@@ -363,7 +363,7 @@ def bench_fwd(
         pass
 
     return (
-        results.get("flash_qla", float("nan")),
+        results.get("mogan_kda", float("nan")),
         results.get("fi", float("nan")),
         results.get("fla", float("nan")),
     )
@@ -448,11 +448,11 @@ def bench_bwd(
 
     try:
         mean = tilelang.profiler.do_bench(call_qla_bwd, warmup=warmup, rep=repeats, backend=backend)
-        results["flash_qla"] = mean
+        results["mogan_kda"] = mean
     except RuntimeError as e:
         print(f"\n[WARN] FlashQLA Bwd failed: {e}")
         cleanup_cuda()
-        results["flash_qla"] = float("nan")
+        results["mogan_kda"] = float("nan")
 
     if HAS_FLA:
         def call_fla_bwd():
@@ -468,18 +468,18 @@ def bench_bwd(
     else:
         results["fla"] = float("nan")
 
-    return results.get("flash_qla", float("nan")), results.get("fla", float("nan"))
+    return results.get("mogan_kda", float("nan")), results.get("fla", float("nan"))
 
 
 FWD_HDR = (
     f"{'Model Config':<16} {'Seqlens':<17} {'h_qk':>5} {'h_v':>5}    "
-    f"{'flash_qla [fwd]':>10}  {'FI [fwd]':>10}  {'FLA [fwd]':>10}   "
+    f"{'mogan_kda [fwd]':>10}  {'FI [fwd]':>10}  {'FLA [fwd]':>10}   "
     f"{'vs FLA':>7}  {'vs FI':>7}"
 )
 
 BWD_HDR = (
     f"{'Model Config':<14} {'SeqLen':<12} {'h_qk':>4} {'h_v':>4} {'#seq':>4}    "
-    f"{'flash_qla [bwd]':>10}  {'FLA [bwd]':>10}   {'Speedup':>8}"
+    f"{'mogan_kda [bwd]':>10}  {'FLA [bwd]':>10}   {'Speedup':>8}"
 )
 
 

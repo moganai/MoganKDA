@@ -9,7 +9,7 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from ref_cp import ref_warmup, ref_warmup_bidi, ref_scan, rel_max, THRESHOLD
-from flash_qla.ops.gated_delta_rule.chunk import (
+from mogan_kda.ops.gated_delta_rule.chunk import (
     CHUNK_SIZE,
     get_warmup_chunks,
     get_warmup_chunks_bidi,

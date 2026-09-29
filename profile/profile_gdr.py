@@ -43,13 +43,13 @@ from fla.ops.gated_delta_rule.chunk import (
     chunk_gated_delta_rule_bwd as chunk_gated_delta_rule_bwd_fla,
 )
 
-from flash_qla.ops.gated_delta_rule.chunk import (
+from mogan_kda.ops.gated_delta_rule.chunk import (
     chunk_gated_delta_rule_fwd as _chunk_gdr_fwd_impl,
     chunk_gated_delta_rule_bwd as _chunk_gdr_bwd_impl,
     _auto_intra_cp_context,
     CHUNK_SIZE,
 )
-from flash_qla.utils import l2norm, pack
+from mogan_kda.utils import l2norm, pack
 from utils import profile
 
 
@@ -264,12 +264,12 @@ def profile_gated_delta_rule(
         result_fla["total"] = prof_fla["total"]
         result_qla["total"] = prof_qla["total"]
 
-        results = {"fla": result_fla, "flash_qla": result_qla}
+        results = {"fla": result_fla, "mogan_kda": result_qla}
         df = pd.DataFrame(results)
         print(df.round(3))
     else:
         print(f"  fla total:       {prof_fla['total']:.3f} ms")
-        print(f"  flash_qla total: {prof_qla['total']:.3f} ms")
+        print(f"  mogan_kda total: {prof_qla['total']:.3f} ms")
 
     speedup = prof_fla["total"] / prof_qla["total"]
     print(f"Fwd speedup: {speedup:.2f}x")
@@ -386,24 +386,24 @@ def profile_gated_delta_rule(
             result_fla["[bwd] reduc"] = _get(prof_fla, "compress_heads_kernel")
         result_fla["total"] = prof_fla["total"]
 
-        results = {"fla": result_fla, "flash_qla": result_qla}
+        results = {"fla": result_fla, "mogan_kda": result_qla}
         df = pd.DataFrame(results)
         print(df.round(3))
         speedup = prof_fla["total"] / prof_qla["total"]
         print(f"Bwd speedup: {speedup:.2f}x")
     elif result_qla is not None:
-        df = pd.DataFrame({"flash_qla": result_qla})
+        df = pd.DataFrame({"mogan_kda": result_qla})
         print(df.round(3))
         if prof_fla is not None:
             speedup = prof_fla["total"] / prof_qla["total"]
             print(f"Bwd speedup: {speedup:.2f}x")
     elif prof_fla is not None:
         print(f"  fla total:       {prof_fla['total']:.3f} ms")
-        print(f"  flash_qla total: {prof_qla['total']:.3f} ms")
+        print(f"  mogan_kda total: {prof_qla['total']:.3f} ms")
         speedup = prof_fla["total"] / prof_qla["total"]
         print(f"Bwd speedup: {speedup:.2f}x")
     else:
-        print(f"  flash_qla bwd total: {prof_qla['total']:.3f} ms")
+        print(f"  mogan_kda bwd total: {prof_qla['total']:.3f} ms")
 
 
 # ---------------------------------------------------------------------------

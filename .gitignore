@@ -3,3 +3,6 @@ __pycache__
 build/
 dist/
 tmp/
+sonuclar/
+cikti/
+*.ncu-rep

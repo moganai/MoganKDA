@@ -10,13 +10,13 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from flash_qla.ops.gated_delta_rule.chunk.cp.autocp.launch import (
+from mogan_kda.ops.gated_delta_rule.chunk.cp.autocp.launch import (
     BACKEND_OF,
     coef_rows,
     current_arch,
     launch_config,
 )
-from flash_qla.ops.gated_delta_rule.chunk.cp.autocp.utils import (
+from mogan_kda.ops.gated_delta_rule.chunk.cp.autocp.utils import (
     COEF_COLUMNS,
     KERNELS,
     seq_chunks,
@@ -178,7 +178,7 @@ class Artifacts:
 
 def _resolve_env(args) -> tuple[str, int]:
     """device / P for the cache key and the model: --device / --sm-count when
-    given, else this GPU's -- which is also what flash_qla was compiled for."""
+    given, else this GPU's -- which is also what mogan_kda was compiled for."""
     device, P = args.device, args.sm_count
     if device is None or P is None:
         import torch
@@ -190,11 +190,11 @@ def _resolve_env(args) -> tuple[str, int]:
 
 
 def _resolve_arch(args) -> str:
-    """--arch when given, else this GPU's via the same probe flash_qla runs on
+    """--arch when given, else this GPU's via the same probe mogan_kda runs on
     import (so it is already cached here).
 
     Only the omitted case asks the device, which keeps --arch a pure override.
-    A box with no visible GPU dies earlier than this -- importing flash_qla
+    A box with no visible GPU dies earlier than this -- importing mogan_kda
     already queries it -- so the guard mainly keeps the message legible.
     """
     if args.arch:
@@ -248,7 +248,7 @@ def parse_args(argv=None) -> argparse.Namespace:
                          "(<stem>_accuracy.csv, <stem>_decision.csv)")
     ap.add_argument("--plot", default=None, metavar="DIR",
                     help="write curves_<mode>.png / parity.png here (needs "
-                         "matplotlib, which is not a flash_qla dependency)")
+                         "matplotlib, which is not a mogan_kda dependency)")
     args = ap.parse_args(argv)
 
     if args.lcp_ratio is None:

@@ -10,10 +10,10 @@ import tilelang
 import torch
 import torch.nn.functional as F
 
-from flash_qla.ops.utils import chunk_local_cumsum
-from flash_qla.utils import l2norm
+from mogan_kda.ops.utils import chunk_local_cumsum
+from mogan_kda.utils import l2norm
 
-from flash_qla.ops.gated_delta_rule.chunk import (  # noqa: F401 -- re-exports
+from mogan_kda.ops.gated_delta_rule.chunk import (  # noqa: F401 -- re-exports
     CHUNK_SIZE,
     correct_initial_states,
     correct_terminal_states,
@@ -25,7 +25,7 @@ from flash_qla.ops.gated_delta_rule.chunk import (  # noqa: F401 -- re-exports
     get_warmup_chunks_bidi,
     kkt_solve,
 )
-from flash_qla.ops.gated_delta_rule.chunk.cp.context import (
+from mogan_kda.ops.gated_delta_rule.chunk.cp.context import (
     _build_intra_cp_context,
 )
 from .utils import (

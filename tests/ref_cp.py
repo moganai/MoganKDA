@@ -11,7 +11,7 @@ clean math spec, which is exactly why they live here and not in ``ref_gdr``.
 """
 import torch
 
-from flash_qla.ops.gated_delta_rule.chunk import CHUNK_SIZE
+from mogan_kda.ops.gated_delta_rule.chunk import CHUNK_SIZE
 
 THRESHOLD = -10.0          # the kernels' default log-decay cutoff
 

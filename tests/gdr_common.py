@@ -14,12 +14,12 @@ import tilelang
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from flash_qla.ops.gated_delta_rule.chunk import (
+from mogan_kda.ops.gated_delta_rule.chunk import (
     chunk_gated_delta_rule_fwd as _chunk_gdr_fwd_impl,
     chunk_gated_delta_rule_bwd as _chunk_gdr_bwd_impl,
     _auto_intra_cp_context,
 )
-from flash_qla.utils import l2norm, pack
+from mogan_kda.utils import l2norm, pack
 from ref_gdr import chunk_gated_delta_rule_fwd as chunk_gated_delta_rule_fwd_ref
 from ref_gdr import chunk_gated_delta_rule_bwd as chunk_gated_delta_rule_bwd_ref
 

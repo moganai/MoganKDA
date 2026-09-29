@@ -10,8 +10,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from flash_qla.ops.gated_delta_rule.chunk.cp.autocp.launch import coef_rows
-from flash_qla.ops.gated_delta_rule.chunk.cp.autocp.utils import (
+from mogan_kda.ops.gated_delta_rule.chunk.cp.autocp.launch import coef_rows
+from mogan_kda.ops.gated_delta_rule.chunk.cp.autocp.utils import (
     COEFS_DIR,
     COEF_COLUMNS,
     CP_ONLY_KERNELS,

@@ -3,7 +3,7 @@
 
 import torch
 
-from flash_qla.utils import (
+from mogan_kda.utils import (
     pad_and_reshape,
     pack,
     unpack,
